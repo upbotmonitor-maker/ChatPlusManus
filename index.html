@@ -54,7 +54,7 @@
         <aside id="sidebar" class="sidebar">
             <div class="sidebar-header">
                 <div class="user-profile-info" id="open-profile">
-                    <img src="https://via.placeholder.com/40" alt="Profil" id="my-avatar" class="avatar">
+                    <div id="my-avatar-container"></div>
                     <div class="user-details">
                         <span id="my-username" class="username">Yükleniyor...</span>
                         <span class="status-text">Çevrimiçi</span>
@@ -82,7 +82,7 @@
             <header class="chat-header">
                 <button id="mobile-menu-btn" class="btn-icon mobile-only"><i class="fas fa-bars"></i></button>
                 <div id="active-user-info" class="active-user-info hidden">
-                    <img src="https://via.placeholder.com/40" alt="Avatar" id="chat-avatar" class="avatar">
+                    <div id="chat-avatar-container"></div>
                     <div class="chat-user-details">
                         <h3 id="chat-username">Kullanıcı Seçin</h3>
                         <span id="chat-status" class="status-text">Offline</span>
@@ -120,12 +120,8 @@
                 <button id="close-profile" class="btn-icon"><i class="fas fa-times"></i></button>
             </div>
             <div class="modal-body">
-                <div class="profile-avatar-container">
-                    <img src="https://via.placeholder.com/100" alt="Profil" id="profile-preview" class="avatar-large">
-                    <label for="avatar-upload" class="upload-btn">
-                        <i class="fas fa-camera"></i>
-                        <input type="file" id="avatar-upload" accept="image/*" hidden>
-                    </label>
+                <div class="profile-avatar-container" id="profile-preview-container">
+                    <!-- Avatar buraya gelecek -->
                 </div>
                 <div class="input-group">
                     <label>Biyografi</label>

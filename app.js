@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
-import { getDatabase, ref, set, onValue, push, serverTimestamp, onDisconnect, update } from "firebase/database";
+import { getDatabase, ref, set, onValue, push, serverTimestamp, onDisconnect, update, off, query, orderByChild } from "firebase/database";
 import firebaseConfig from "./firebase-config.js";
 
 // Initialize Firebase
@@ -9,13 +9,14 @@ const auth = getAuth(app);
 const db = getDatabase(app);
 
 // Constants
-const IMGBB_API_KEY = "YOUR_IMGBB_API_KEY_HERE"; // Placeholder
-const DEFAULT_AVATAR = "https://via.placeholder.com/150";
+const IMGBB_API_KEY = "YOUR_IMGBB_API_KEY_HERE";
+const AVATAR_COLORS = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4caf50', '#8bc34a', '#cddc39', '#ffeb3b', '#ffc107', '#ff9800', '#ff5722'];
 
 // State
 let currentUser = null;
 let activeChatUserId = null;
 let users = {};
+let messageListener = null;
 
 // DOM Elements
 const authContainer = document.getElementById('auth-container');
@@ -47,8 +48,23 @@ const mobileMenuBtn = document.getElementById('mobile-menu-btn');
 const mobileCloseSidebar = document.getElementById('mobile-close-sidebar');
 const sidebar = document.getElementById('sidebar');
 
-// --- Auth Logic ---
+// --- Avatar Helper ---
+function getAvatarHTML(user, isLarge = false) {
+    const className = isLarge ? 'avatar-large' : 'avatar';
+    if (user.avatar && user.avatar.startsWith('http') && !user.avatar.includes('via.placeholder')) {
+        return `<img src="${user.avatar}" class="${className}" onerror="this.outerHTML='${getLetterAvatar(user.username, className)}'">`;
+    }
+    return getLetterAvatar(user.username, className);
+}
 
+function getLetterAvatar(username, className) {
+    const firstLetter = username ? username.charAt(0).toUpperCase() : '?';
+    const charCode = firstLetter.charCodeAt(0);
+    const color = AVATAR_COLORS[charCode % AVATAR_COLORS.length];
+    return `<div class="${className}" style="background-color: ${color}">${firstLetter}</div>`;
+}
+
+// --- Auth Logic ---
 showRegister.onclick = (e) => { e.preventDefault(); loginForm.classList.add('hidden'); registerForm.classList.remove('hidden'); };
 showLogin.onclick = (e) => { e.preventDefault(); registerForm.classList.add('hidden'); loginForm.classList.remove('hidden'); };
 
@@ -56,7 +72,7 @@ registerForm.onsubmit = async (e) => {
     e.preventDefault();
     const username = document.getElementById('register-username').value.trim();
     const pass = document.getElementById('register-password').value;
-    const email = `${username}@chatplus.com`;
+    const email = `${username.toLowerCase()}@chatplus.com`;
 
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
@@ -65,7 +81,7 @@ registerForm.onsubmit = async (e) => {
         await set(ref(db, 'users/' + user.uid), {
             uid: user.uid,
             username: username,
-            avatar: DEFAULT_AVATAR,
+            avatar: "",
             bio: "Hey there! I am using ChatPlus.",
             lastSeen: serverTimestamp(),
             online: false
@@ -84,7 +100,7 @@ loginForm.onsubmit = async (e) => {
     e.preventDefault();
     const username = document.getElementById('login-username').value.trim();
     const pass = document.getElementById('login-password').value;
-    const email = `${username}@chatplus.com`;
+    const email = `${username.toLowerCase()}@chatplus.com`;
 
     try {
         await signInWithEmailAndPassword(auth, email, pass);
@@ -94,9 +110,9 @@ loginForm.onsubmit = async (e) => {
     }
 };
 
-logoutBtn.onclick = () => {
+logoutBtn.onclick = async () => {
     if (currentUser) {
-        update(ref(db, 'users/' + currentUser.uid), { online: false, lastSeen: serverTimestamp() });
+        await update(ref(db, 'users/' + currentUser.uid), { online: false, lastSeen: serverTimestamp() });
         signOut(auth);
     }
 };
@@ -107,44 +123,61 @@ onAuthStateChanged(auth, (user) => {
         authContainer.classList.add('hidden');
         appContainer.classList.remove('hidden');
         setupUserPresence();
-        loadUserList();
+        listenToUsers();
         loadMyProfile();
     } else {
         currentUser = null;
         authContainer.classList.remove('hidden');
         appContainer.classList.add('hidden');
+        if (messageListener) off(messageListener);
     }
 });
 
-// --- Presence & User List ---
-
+// --- Presence & Global User List ---
 function setupUserPresence() {
     const userStatusRef = ref(db, 'users/' + currentUser.uid);
-    update(userStatusRef, { online: true });
-    onDisconnect(userStatusRef).update({ online: false, lastSeen: serverTimestamp() });
+    const connectedRef = ref(db, '.info/connected');
+    
+    onValue(connectedRef, (snap) => {
+        if (snap.val() === true) {
+            update(userStatusRef, { online: true });
+            onDisconnect(userStatusRef).update({ online: false, lastSeen: serverTimestamp() });
+        }
+    });
 }
 
-function loadUserList() {
-    onValue(ref(db, 'users'), (snapshot) => {
-        userList.innerHTML = '';
+function listenToUsers() {
+    // Global kullanıcı görünürlüğü için tüm kullanıcıları dinle
+    const usersRef = ref(db, 'users');
+    onValue(usersRef, (snapshot) => {
         users = snapshot.val() || {};
+        renderUserList();
         
-        Object.values(users).forEach(user => {
-            if (user.uid === currentUser.uid) return;
+        // Eğer aktif bir sohbet varsa ve o kullanıcı güncellendiyse başlığı güncelle
+        if (activeChatUserId && users[activeChatUserId]) {
+            const user = users[activeChatUserId];
+            chatStatus.innerText = user.online ? 'Çevrimiçi' : 'Son görülme: ' + formatTime(user.lastSeen);
+        }
+    });
+}
 
-            const div = document.createElement('div');
-            div.className = `user-item ${activeChatUserId === user.uid ? 'active' : ''}`;
-            div.innerHTML = `
-                <img src="${user.avatar || DEFAULT_AVATAR}" class="avatar">
-                <div class="user-info">
-                    <h4>${user.username}</h4>
-                    <span class="status-text">${user.online ? 'Çevrimiçi' : 'Son görülme: ' + formatTime(user.lastSeen)}</span>
-                </div>
-                <span class="status-dot ${user.online ? 'online' : 'offline'}"></span>
-            `;
-            div.onclick = () => selectUser(user);
-            userList.appendChild(div);
-        });
+function renderUserList() {
+    userList.innerHTML = '';
+    Object.values(users).forEach(user => {
+        if (user.uid === currentUser.uid) return;
+
+        const div = document.createElement('div');
+        div.className = `user-item ${activeChatUserId === user.uid ? 'active' : ''}`;
+        div.innerHTML = `
+            ${getAvatarHTML(user)}
+            <div class="user-info">
+                <h4>${user.username}</h4>
+                <span class="status-text">${user.online ? 'Çevrimiçi' : 'Son görülme: ' + formatTime(user.lastSeen)}</span>
+            </div>
+            <span class="status-dot ${user.online ? 'online' : 'offline'}"></span>
+        `;
+        div.onclick = () => selectUser(user);
+        userList.appendChild(div);
     });
 }
 
@@ -153,23 +186,28 @@ function selectUser(user) {
     activeUserInfo.classList.remove('hidden');
     chatFooter.classList.remove('hidden');
     chatUsername.innerText = user.username;
-    chatAvatar.src = user.avatar || DEFAULT_AVATAR;
+    
+    // Header avatar güncelleme
+    const headerAvatarContainer = chatAvatar.parentElement;
+    headerAvatarContainer.innerHTML = getAvatarHTML(user);
+    headerAvatarContainer.id = "chat-avatar-container"; // ID'yi korumak için
+    
     chatStatus.innerText = user.online ? 'Çevrimiçi' : 'Son görülme: ' + formatTime(user.lastSeen);
     
-    // Mobile: Close sidebar after selection
     sidebar.classList.remove('open');
-    
+    renderUserList();
     loadMessages();
     listenTyping();
 }
 
-// --- Messaging Logic ---
-
+// --- Real-time Messaging ---
 function loadMessages() {
-    const chatId = [currentUser.uid, activeChatUserId].sort().join('_');
-    const messagesRef = ref(db, 'chats/' + chatId + '/messages');
+    if (messageListener) off(messageListener);
     
-    onValue(messagesRef, (snapshot) => {
+    const chatId = [currentUser.uid, activeChatUserId].sort().join('_');
+    messageListener = ref(db, 'chats/' + chatId + '/messages');
+    
+    onValue(messageListener, (snapshot) => {
         messagesContainer.innerHTML = '';
         const data = snapshot.val();
         if (data) {
@@ -178,7 +216,6 @@ function loadMessages() {
                 const div = document.createElement('div');
                 div.className = `message ${isMine ? 'sent' : 'received'}`;
                 
-                // Mark as read if received
                 if (!isMine && !msg.read) {
                     update(ref(db, `chats/${chatId}/messages/${key}`), { read: true });
                 }
@@ -219,7 +256,6 @@ messageForm.onsubmit = (e) => {
 };
 
 // --- Typing Indicator ---
-
 let typingTimeout;
 messageInput.oninput = () => {
     if (!activeChatUserId) return;
@@ -249,23 +285,33 @@ function listenTyping() {
 }
 
 // --- Profile & ImgBB ---
-
 function loadMyProfile() {
     onValue(ref(db, 'users/' + currentUser.uid), (snapshot) => {
         const data = snapshot.val();
         if (data) {
             document.getElementById('my-username').innerText = data.username;
-            document.getElementById('my-avatar').src = data.avatar || DEFAULT_AVATAR;
-            profilePreview.src = data.avatar || DEFAULT_AVATAR;
+            const myAvatarContainer = document.getElementById('my-avatar').parentElement;
+            myAvatarContainer.innerHTML = getAvatarHTML(data);
+            myAvatarContainer.id = "my-avatar-container";
+
+            const profilePreviewContainer = profilePreview.parentElement;
+            profilePreviewContainer.innerHTML = getAvatarHTML(data, true);
+            // Re-append upload label since we replaced innerHTML
+            const label = document.createElement('label');
+            label.htmlFor = 'avatar-upload';
+            label.className = 'upload-btn';
+            label.innerHTML = '<i class="fas fa-camera"></i><input type="file" id="avatar-upload" accept="image/*" hidden>';
+            profilePreviewContainer.appendChild(label);
+            
+            // Re-bind upload event
+            document.getElementById('avatar-upload').onchange = handleAvatarUpload;
+            
             profileBio.value = data.bio || "";
         }
     });
 }
 
-openProfile.onclick = () => profileModal.classList.remove('hidden');
-closeProfile.onclick = () => profileModal.classList.add('hidden');
-
-avatarUpload.onchange = async (e) => {
+async function handleAvatarUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
 
@@ -279,24 +325,26 @@ avatarUpload.onchange = async (e) => {
         });
         const data = await res.json();
         if (data.success) {
-            profilePreview.src = data.data.url;
+            await update(ref(db, 'users/' + currentUser.uid), { avatar: data.data.url });
+            alert("Profil resmi güncellendi!");
         }
     } catch (error) {
         alert("Resim yükleme hatası!");
     }
-};
+}
+
+openProfile.onclick = () => profileModal.classList.remove('hidden');
+closeProfile.onclick = () => profileModal.classList.add('hidden');
 
 saveProfile.onclick = async () => {
     await update(ref(db, 'users/' + currentUser.uid), {
-        avatar: profilePreview.src,
         bio: profileBio.value
     });
     profileModal.classList.add('hidden');
-    alert("Profil güncellendi!");
+    alert("Biyografi güncellendi!");
 };
 
 // --- Theme & Utils ---
-
 themeToggle.onclick = () => {
     const isDark = document.body.classList.toggle('dark-mode');
     document.body.classList.toggle('light-mode', !isDark);
@@ -304,7 +352,6 @@ themeToggle.onclick = () => {
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
 };
 
-// Load saved theme
 const savedTheme = localStorage.getItem('theme');
 if (savedTheme === 'dark') {
     document.body.classList.add('dark-mode');
@@ -315,9 +362,15 @@ if (savedTheme === 'dark') {
 function formatTime(timestamp) {
     if (!timestamp) return "";
     const date = new Date(timestamp);
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const now = new Date();
+    const isToday = date.toDateString() === now.toDateString();
+    
+    if (isToday) {
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    } else {
+        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
 }
 
-// Mobile Handlers
 mobileMenuBtn.onclick = () => sidebar.classList.add('open');
 mobileCloseSidebar.onclick = () => sidebar.classList.remove('open');
