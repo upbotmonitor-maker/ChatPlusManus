@@ -3,20 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ChatPlus | Modern Sohbet Deneyimi</title>
+    <title>ChatPlus | Premium Chat Experience</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="style.css">
 </head>
-<body class="light-mode">
-    <!-- Giriş ve Kayıt Ekranı -->
+<body class="dark-mode">
+    <!-- Auth Container -->
     <div id="auth-container" class="auth-container">
         <div class="auth-box">
             <div class="auth-header">
-                <i class="fas fa-comments logo-icon"></i>
+                <i class="fas fa-bolt logo-icon"></i>
                 <h1>ChatPlus</h1>
             </div>
             
-            <!-- Login Form -->
             <form id="login-form" class="auth-form">
                 <h2>Giriş Yap</h2>
                 <div class="input-group">
@@ -27,11 +26,10 @@
                     <i class="fas fa-lock"></i>
                     <input type="password" id="login-password" placeholder="Şifre" required>
                 </div>
-                <button type="submit" class="btn-primary">Giriş Yap</button>
-                <p class="auth-footer">Hesabın yok mu? <a href="#" id="show-register">Kayıt Ol</a></p>
+                <button type="submit" class="btn-primary">Sisteme Bağlan</button>
+                <p class="auth-footer">Hesabın yok mu? <a href="#" id="show-register">Hemen Kayıt Ol</a></p>
             </form>
 
-            <!-- Register Form -->
             <form id="register-form" class="auth-form hidden">
                 <h2>Kayıt Ol</h2>
                 <div class="input-group">
@@ -42,15 +40,14 @@
                     <i class="fas fa-lock"></i>
                     <input type="password" id="register-password" placeholder="Şifre" required>
                 </div>
-                <button type="submit" class="btn-primary">Kayıt Ol</button>
+                <button type="submit" class="btn-primary">Hesap Oluştur</button>
                 <p class="auth-footer">Zaten üye misin? <a href="#" id="show-login">Giriş Yap</a></p>
             </form>
         </div>
     </div>
 
-    <!-- Ana Uygulama Ekranı -->
+    <!-- Main App Container -->
     <div id="app-container" class="app-container hidden">
-        <!-- Sol Panel: Kullanıcı Listesi -->
         <aside id="sidebar" class="sidebar">
             <div class="sidebar-header">
                 <div class="user-profile-info" id="open-profile">
@@ -61,8 +58,8 @@
                     </div>
                 </div>
                 <div class="header-actions">
-                    <button id="theme-toggle" class="btn-icon"><i class="fas fa-moon"></i></button>
-                    <button id="logout-btn" class="btn-icon"><i class="fas fa-sign-out-alt"></i></button>
+                    <button id="theme-toggle" class="btn-icon"><i class="fas fa-sun"></i></button>
+                    <button id="logout-btn" class="btn-icon"><i class="fas fa-power-off"></i></button>
                     <button id="mobile-close-sidebar" class="btn-icon mobile-only"><i class="fas fa-times"></i></button>
                 </div>
             </div>
@@ -73,18 +70,17 @@
                 </div>
             </div>
             <div id="user-list" class="user-list">
-                <!-- Kullanıcılar buraya dinamik olarak eklenecek -->
+                <!-- Dinamik kullanıcı listesi -->
             </div>
         </aside>
 
-        <!-- Sağ Panel: Sohbet Alanı -->
         <main class="chat-area">
             <header class="chat-header">
                 <button id="mobile-menu-btn" class="btn-icon mobile-only"><i class="fas fa-bars"></i></button>
-                <div id="active-user-info" class="active-user-info hidden">
+                <div id="active-user-info" class="active-user-info hidden" style="display: flex; align-items: center; gap: 15px;">
                     <div id="chat-avatar-container"></div>
                     <div class="chat-user-details">
-                        <h3 id="chat-username">Kullanıcı Seçin</h3>
+                        <h3 id="chat-username" style="font-size: 1.1rem; font-weight: 600;">Kullanıcı Seçin</h3>
                         <span id="chat-status" class="status-text">Offline</span>
                     </div>
                 </div>
@@ -92,27 +88,27 @@
 
             <div id="messages-container" class="messages-container">
                 <div class="welcome-screen">
-                    <i class="fas fa-comments"></i>
-                    <h2>ChatPlus'a Hoş Geldiniz</h2>
-                    <p>Mesajlaşmaya başlamak için soldan bir kullanıcı seçin.</p>
+                    <i class="fas fa-bolt"></i>
+                    <h2>ChatPlus Premium</h2>
+                    <p>Hızlı, güvenli ve modern mesajlaşma deneyimine hoş geldiniz.</p>
                 </div>
             </div>
 
             <div id="typing-indicator" class="typing-indicator hidden">
-                <span id="typing-text">birisi yazıyor...</span>
+                <span id="typing-text">yazıyor...</span>
                 <div class="dots"><span></span><span></span><span></span></div>
             </div>
 
             <footer class="chat-footer hidden" id="chat-footer">
                 <form id="message-form">
-                    <input type="text" id="message-input" placeholder="Mesajınızı yazın..." autocomplete="off">
+                    <input type="text" id="message-input" placeholder="Bir mesaj yazın..." autocomplete="off">
                     <button type="submit" class="btn-send"><i class="fas fa-paper-plane"></i></button>
                 </form>
             </footer>
         </main>
     </div>
 
-    <!-- Profil Modalı -->
+    <!-- Profile Modal -->
     <div id="profile-modal" class="modal hidden">
         <div class="modal-content">
             <div class="modal-header">
@@ -121,13 +117,13 @@
             </div>
             <div class="modal-body">
                 <div class="profile-avatar-container" id="profile-preview-container">
-                    <!-- Avatar buraya gelecek -->
+                    <!-- Dinamik avatar -->
                 </div>
                 <div class="input-group">
-                    <label>Biyografi</label>
+                    <label style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--text-secondary);">Biyografi</label>
                     <textarea id="profile-bio" placeholder="Kendinizden bahsedin..."></textarea>
                 </div>
-                <button id="save-profile" class="btn-primary">Kaydet</button>
+                <button id="save-profile" class="btn-primary">Değişiklikleri Kaydet</button>
             </div>
         </div>
     </div>

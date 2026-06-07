@@ -1,57 +1,66 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
-import { getDatabase, ref, set, onValue, push, serverTimestamp, onDisconnect, update, off, query, orderByChild } from "firebase/database";
+import { getDatabase, ref, set, onValue, push, serverTimestamp, onDisconnect, update, off } from "firebase/database";
 import firebaseConfig from "./firebase-config.js";
 
-// Initialize Firebase
+// --- Initialization ---
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getDatabase(app);
 
-// Constants
+// --- Constants ---
 const IMGBB_API_KEY = "YOUR_IMGBB_API_KEY_HERE";
-const AVATAR_COLORS = ['#f44336', '#e91e63', '#9c27b0', '#673ab7', '#3f51b5', '#2196f3', '#03a9f4', '#00bcd4', '#009688', '#4caf50', '#8bc34a', '#cddc39', '#ffeb3b', '#ffc107', '#ff9800', '#ff5722'];
+const AVATAR_GRADIENTS = [
+    'linear-gradient(135deg, #bb86fc 0%, #6200ee 100%)',
+    'linear-gradient(135deg, #03dac6 0%, #018786 100%)',
+    'linear-gradient(135deg, #cf6679 0%, #b00020 100%)',
+    'linear-gradient(135deg, #ffb74d 0%, #f57c00 100%)',
+    'linear-gradient(135deg, #4fc3f7 0%, #0288d1 100%)',
+    'linear-gradient(135deg, #81c784 0%, #388e3c 100%)'
+];
 
-// State
+// --- State Management ---
 let currentUser = null;
 let activeChatUserId = null;
 let users = {};
 let messageListener = null;
 
-// DOM Elements
-const authContainer = document.getElementById('auth-container');
-const appContainer = document.getElementById('app-container');
-const loginForm = document.getElementById('login-form');
-const registerForm = document.getElementById('register-form');
-const showRegister = document.getElementById('show-register');
-const showLogin = document.getElementById('show-login');
-const userList = document.getElementById('user-list');
-const messagesContainer = document.getElementById('messages-container');
-const messageForm = document.getElementById('message-form');
-const messageInput = document.getElementById('message-input');
-const chatFooter = document.getElementById('chat-footer');
-const chatUsername = document.getElementById('chat-username');
-const chatStatus = document.getElementById('chat-status');
-const chatAvatar = document.getElementById('chat-avatar');
-const activeUserInfo = document.getElementById('active-user-info');
-const themeToggle = document.getElementById('theme-toggle');
-const logoutBtn = document.getElementById('logout-btn');
-const openProfile = document.getElementById('open-profile');
-const profileModal = document.getElementById('profile-modal');
-const closeProfile = document.getElementById('close-profile');
-const profilePreview = document.getElementById('profile-preview');
-const avatarUpload = document.getElementById('avatar-upload');
-const profileBio = document.getElementById('profile-bio');
-const saveProfile = document.getElementById('save-profile');
-const typingIndicator = document.getElementById('typing-indicator');
-const mobileMenuBtn = document.getElementById('mobile-menu-btn');
-const mobileCloseSidebar = document.getElementById('mobile-close-sidebar');
-const sidebar = document.getElementById('sidebar');
+// --- DOM Cache ---
+const elements = {
+    authContainer: document.getElementById('auth-container'),
+    appContainer: document.getElementById('app-container'),
+    loginForm: document.getElementById('login-form'),
+    registerForm: document.getElementById('register-form'),
+    showRegister: document.getElementById('show-register'),
+    showLogin: document.getElementById('show-login'),
+    userList: document.getElementById('user-list'),
+    messagesContainer: document.getElementById('messages-container'),
+    messageForm: document.getElementById('message-form'),
+    messageInput: document.getElementById('message-input'),
+    chatFooter: document.getElementById('chat-footer'),
+    chatUsername: document.getElementById('chat-username'),
+    chatStatus: document.getElementById('chat-status'),
+    activeUserInfo: document.getElementById('active-user-info'),
+    themeToggle: document.getElementById('theme-toggle'),
+    logoutBtn: document.getElementById('logout-btn'),
+    openProfile: document.getElementById('open-profile'),
+    profileModal: document.getElementById('profile-modal'),
+    closeProfile: document.getElementById('close-profile'),
+    profileBio: document.getElementById('profile-bio'),
+    saveProfile: document.getElementById('save-profile'),
+    typingIndicator: document.getElementById('typing-indicator'),
+    mobileMenuBtn: document.getElementById('mobile-menu-btn'),
+    mobileCloseSidebar: document.getElementById('mobile-close-sidebar'),
+    sidebar: document.getElementById('sidebar'),
+    myAvatarContainer: document.getElementById('my-avatar-container'),
+    chatAvatarContainer: document.getElementById('chat-avatar-container'),
+    profilePreviewContainer: document.getElementById('profile-preview-container')
+};
 
-// --- Avatar Helper ---
+// --- Avatar System ---
 function getAvatarHTML(user, isLarge = false) {
     const className = isLarge ? 'avatar-large' : 'avatar';
-    if (user.avatar && user.avatar.startsWith('http') && !user.avatar.includes('via.placeholder')) {
+    if (user.avatar && user.avatar.startsWith('http')) {
         return `<img src="${user.avatar}" class="${className}" onerror="this.outerHTML='${getLetterAvatar(user.username, className)}'">`;
     }
     return getLetterAvatar(user.username, className);
@@ -60,15 +69,26 @@ function getAvatarHTML(user, isLarge = false) {
 function getLetterAvatar(username, className) {
     const firstLetter = username ? username.charAt(0).toUpperCase() : '?';
     const charCode = firstLetter.charCodeAt(0);
-    const color = AVATAR_COLORS[charCode % AVATAR_COLORS.length];
-    return `<div class="${className}" style="background-color: ${color}">${firstLetter}</div>`;
+    const gradient = AVATAR_GRADIENTS[charCode % AVATAR_GRADIENTS.length];
+    return `<div class="${className}" style="background: ${gradient}">${firstLetter}</div>`;
 }
 
-// --- Auth Logic ---
-showRegister.onclick = (e) => { e.preventDefault(); loginForm.classList.add('hidden'); registerForm.classList.remove('hidden'); };
-showLogin.onclick = (e) => { e.preventDefault(); registerForm.classList.add('hidden'); loginForm.classList.remove('hidden'); };
+// --- UI Updates ---
+function toggleLoading(isLoading) {
+    // Bu fonksiyon "Loading" krizini yönetir
+    if (isLoading) {
+        // Gerekirse bir spinner eklenebilir
+    } else {
+        elements.authContainer.classList.add('hidden');
+        elements.appContainer.classList.remove('hidden');
+    }
+}
 
-registerForm.onsubmit = async (e) => {
+// --- Auth Core ---
+elements.showRegister.onclick = (e) => { e.preventDefault(); elements.loginForm.classList.add('hidden'); elements.registerForm.classList.remove('hidden'); };
+elements.showLogin.onclick = (e) => { e.preventDefault(); elements.registerForm.classList.add('hidden'); elements.loginForm.classList.remove('hidden'); };
+
+elements.registerForm.onsubmit = async (e) => {
     e.preventDefault();
     const username = document.getElementById('register-username').value.trim();
     const pass = document.getElementById('register-password').value;
@@ -76,27 +96,24 @@ registerForm.onsubmit = async (e) => {
 
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
-        const user = userCredential.user;
-        
-        await set(ref(db, 'users/' + user.uid), {
-            uid: user.uid,
+        await set(ref(db, 'users/' + userCredential.user.uid), {
+            uid: userCredential.user.uid,
             username: username,
             avatar: "",
             bio: "Hey there! I am using ChatPlus.",
             lastSeen: serverTimestamp(),
             online: false
         });
-
-        alert("Kayıt başarılı! Şimdi giriş yapabilirsiniz.");
+        alert("Kayıt başarılı! Giriş yapabilirsiniz.");
         await signOut(auth);
-        registerForm.reset();
-        showLogin.click();
+        elements.registerForm.reset();
+        elements.showLogin.click();
     } catch (error) {
-        alert("Hata: " + error.message);
+        alert("Kayıt Hatası: " + error.message);
     }
 };
 
-loginForm.onsubmit = async (e) => {
+elements.loginForm.onsubmit = async (e) => {
     e.preventDefault();
     const username = document.getElementById('login-username').value.trim();
     const pass = document.getElementById('login-password').value;
@@ -104,40 +121,41 @@ loginForm.onsubmit = async (e) => {
 
     try {
         await signInWithEmailAndPassword(auth, email, pass);
-        loginForm.reset();
     } catch (error) {
-        alert("Hata: " + error.message);
+        alert("Giriş Hatası: " + error.message);
     }
 };
 
-logoutBtn.onclick = async () => {
+elements.logoutBtn.onclick = async () => {
     if (currentUser) {
         await update(ref(db, 'users/' + currentUser.uid), { online: false, lastSeen: serverTimestamp() });
-        signOut(auth);
+        await signOut(auth);
+        window.location.reload(); // Temiz bir çıkış için
     }
 };
 
 onAuthStateChanged(auth, (user) => {
     if (user) {
         currentUser = user;
-        authContainer.classList.add('hidden');
-        appContainer.classList.remove('hidden');
-        setupUserPresence();
-        listenToUsers();
-        loadMyProfile();
+        toggleLoading(false);
+        initializeAppData();
     } else {
         currentUser = null;
-        authContainer.classList.remove('hidden');
-        appContainer.classList.add('hidden');
-        if (messageListener) off(messageListener);
+        elements.authContainer.classList.remove('hidden');
+        elements.appContainer.classList.add('hidden');
     }
 });
 
-// --- Presence & Global User List ---
+// --- Data Core ---
+function initializeAppData() {
+    setupUserPresence();
+    listenToUsers();
+    loadMyProfile();
+}
+
 function setupUserPresence() {
     const userStatusRef = ref(db, 'users/' + currentUser.uid);
     const connectedRef = ref(db, '.info/connected');
-    
     onValue(connectedRef, (snap) => {
         if (snap.val() === true) {
             update(userStatusRef, { online: true });
@@ -147,25 +165,19 @@ function setupUserPresence() {
 }
 
 function listenToUsers() {
-    // Global kullanıcı görünürlüğü için tüm kullanıcıları dinle
-    const usersRef = ref(db, 'users');
-    onValue(usersRef, (snapshot) => {
+    onValue(ref(db, 'users'), (snapshot) => {
         users = snapshot.val() || {};
         renderUserList();
-        
-        // Eğer aktif bir sohbet varsa ve o kullanıcı güncellendiyse başlığı güncelle
         if (activeChatUserId && users[activeChatUserId]) {
-            const user = users[activeChatUserId];
-            chatStatus.innerText = user.online ? 'Çevrimiçi' : 'Son görülme: ' + formatTime(user.lastSeen);
+            updateChatHeader(users[activeChatUserId]);
         }
     });
 }
 
 function renderUserList() {
-    userList.innerHTML = '';
+    elements.userList.innerHTML = '';
     Object.values(users).forEach(user => {
         if (user.uid === currentUser.uid) return;
-
         const div = document.createElement('div');
         div.className = `user-item ${activeChatUserId === user.uid ? 'active' : ''}`;
         div.innerHTML = `
@@ -177,49 +189,42 @@ function renderUserList() {
             <span class="status-dot ${user.online ? 'online' : 'offline'}"></span>
         `;
         div.onclick = () => selectUser(user);
-        userList.appendChild(div);
+        elements.userList.appendChild(div);
     });
 }
 
 function selectUser(user) {
     activeChatUserId = user.uid;
-    activeUserInfo.classList.remove('hidden');
-    chatFooter.classList.remove('hidden');
-    chatUsername.innerText = user.username;
-    
-    // Header avatar güncelleme
-    const headerAvatarContainer = chatAvatar.parentElement;
-    headerAvatarContainer.innerHTML = getAvatarHTML(user);
-    headerAvatarContainer.id = "chat-avatar-container"; // ID'yi korumak için
-    
-    chatStatus.innerText = user.online ? 'Çevrimiçi' : 'Son görülme: ' + formatTime(user.lastSeen);
-    
-    sidebar.classList.remove('open');
+    elements.activeUserInfo.classList.remove('hidden');
+    elements.chatFooter.classList.remove('hidden');
+    updateChatHeader(user);
+    elements.sidebar.classList.remove('open');
     renderUserList();
     loadMessages();
     listenTyping();
 }
 
+function updateChatHeader(user) {
+    elements.chatUsername.innerText = user.username;
+    elements.chatAvatarContainer.innerHTML = getAvatarHTML(user);
+    elements.chatStatus.innerText = user.online ? 'Çevrimiçi' : 'Son görülme: ' + formatTime(user.lastSeen);
+}
+
 // --- Real-time Messaging ---
 function loadMessages() {
     if (messageListener) off(messageListener);
-    
     const chatId = [currentUser.uid, activeChatUserId].sort().join('_');
     messageListener = ref(db, 'chats/' + chatId + '/messages');
     
     onValue(messageListener, (snapshot) => {
-        messagesContainer.innerHTML = '';
+        elements.messagesContainer.innerHTML = '';
         const data = snapshot.val();
         if (data) {
             Object.entries(data).forEach(([key, msg]) => {
                 const isMine = msg.senderId === currentUser.uid;
                 const div = document.createElement('div');
                 div.className = `message ${isMine ? 'sent' : 'received'}`;
-                
-                if (!isMine && !msg.read) {
-                    update(ref(db, `chats/${chatId}/messages/${key}`), { read: true });
-                }
-
+                if (!isMine && !msg.read) update(ref(db, `chats/${chatId}/messages/${key}`), { read: true });
                 div.innerHTML = `
                     <div class="message-text">${msg.text}</div>
                     <div class="message-info">
@@ -227,41 +232,36 @@ function loadMessages() {
                         ${isMine ? `<i class="fas fa-check-double ${msg.read ? 'tick-read' : ''}"></i>` : ''}
                     </div>
                 `;
-                messagesContainer.appendChild(div);
+                elements.messagesContainer.appendChild(div);
             });
-            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+            elements.messagesContainer.scrollTop = elements.messagesContainer.scrollHeight;
         } else {
-            messagesContainer.innerHTML = '<div class="welcome-screen"><p>Henüz mesaj yok. İlk mesajı sen gönder!</p></div>';
+            elements.messagesContainer.innerHTML = '<div class="welcome-screen"><i class="fas fa-comments"></i><p>Sohbeti başlatın!</p></div>';
         }
     });
 }
 
-messageForm.onsubmit = (e) => {
+elements.messageForm.onsubmit = (e) => {
     e.preventDefault();
-    const text = messageInput.value.trim();
+    const text = elements.messageInput.value.trim();
     if (!text || !activeChatUserId) return;
-
     const chatId = [currentUser.uid, activeChatUserId].sort().join('_');
-    const messagesRef = ref(db, 'chats/' + chatId + '/messages');
-    
-    push(messagesRef, {
+    push(ref(db, 'chats/' + chatId + '/messages'), {
         senderId: currentUser.uid,
         text: text,
         timestamp: serverTimestamp(),
         read: false
     });
-
-    messageInput.value = '';
+    elements.messageInput.value = '';
     stopTyping();
 };
 
 // --- Typing Indicator ---
 let typingTimeout;
-messageInput.oninput = () => {
+elements.messageInput.oninput = () => {
     if (!activeChatUserId) return;
     const chatId = [currentUser.uid, activeChatUserId].sort().join('_');
     set(ref(db, `typing/${chatId}/${currentUser.uid}`), true);
-    
     clearTimeout(typingTimeout);
     typingTimeout = setTimeout(stopTyping, 3000);
 };
@@ -276,101 +276,87 @@ function listenTyping() {
     const chatId = [currentUser.uid, activeChatUserId].sort().join('_');
     onValue(ref(db, `typing/${chatId}/${activeChatUserId}`), (snapshot) => {
         if (snapshot.val() === true) {
-            typingIndicator.classList.remove('hidden');
-            typingIndicator.querySelector('#typing-text').innerText = `${users[activeChatUserId].username} yazıyor...`;
+            elements.typingIndicator.classList.remove('hidden');
+            elements.typingIndicator.querySelector('#typing-text').innerText = `${users[activeChatUserId].username} yazıyor...`;
         } else {
-            typingIndicator.classList.add('hidden');
+            elements.typingIndicator.classList.add('hidden');
         }
     });
 }
 
-// --- Profile & ImgBB ---
+// --- Profile Management ---
 function loadMyProfile() {
     onValue(ref(db, 'users/' + currentUser.uid), (snapshot) => {
         const data = snapshot.val();
         if (data) {
             document.getElementById('my-username').innerText = data.username;
-            const myAvatarContainer = document.getElementById('my-avatar').parentElement;
-            myAvatarContainer.innerHTML = getAvatarHTML(data);
-            myAvatarContainer.id = "my-avatar-container";
-
-            const profilePreviewContainer = profilePreview.parentElement;
-            profilePreviewContainer.innerHTML = getAvatarHTML(data, true);
-            // Re-append upload label since we replaced innerHTML
-            const label = document.createElement('label');
-            label.htmlFor = 'avatar-upload';
-            label.className = 'upload-btn';
-            label.innerHTML = '<i class="fas fa-camera"></i><input type="file" id="avatar-upload" accept="image/*" hidden>';
-            profilePreviewContainer.appendChild(label);
-            
-            // Re-bind upload event
-            document.getElementById('avatar-upload').onchange = handleAvatarUpload;
-            
-            profileBio.value = data.bio || "";
+            elements.myAvatarContainer.innerHTML = getAvatarHTML(data);
+            updateProfilePreview(data);
+            elements.profileBio.value = data.bio || "";
         }
     });
+}
+
+function updateProfilePreview(user) {
+    elements.profilePreviewContainer.innerHTML = getAvatarHTML(user, true);
+    const label = document.createElement('label');
+    label.htmlFor = 'avatar-upload';
+    label.className = 'upload-btn';
+    label.innerHTML = '<i class="fas fa-camera"></i><input type="file" id="avatar-upload" accept="image/*" hidden>';
+    elements.profilePreviewContainer.appendChild(label);
+    document.getElementById('avatar-upload').onchange = handleAvatarUpload;
 }
 
 async function handleAvatarUpload(e) {
     const file = e.target.files[0];
     if (!file) return;
-
     const formData = new FormData();
     formData.append('image', file);
-
     try {
-        const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, {
-            method: 'POST',
-            body: formData
-        });
+        const res = await fetch(`https://api.imgbb.com/1/upload?key=${IMGBB_API_KEY}`, { method: 'POST', body: formData });
         const data = await res.json();
         if (data.success) {
             await update(ref(db, 'users/' + currentUser.uid), { avatar: data.data.url });
             alert("Profil resmi güncellendi!");
         }
     } catch (error) {
-        alert("Resim yükleme hatası!");
+        alert("Yükleme Hatası!");
     }
 }
 
-openProfile.onclick = () => profileModal.classList.remove('hidden');
-closeProfile.onclick = () => profileModal.classList.add('hidden');
-
-saveProfile.onclick = async () => {
-    await update(ref(db, 'users/' + currentUser.uid), {
-        bio: profileBio.value
-    });
-    profileModal.classList.add('hidden');
-    alert("Biyografi güncellendi!");
+elements.openProfile.onclick = () => elements.profileModal.classList.remove('hidden');
+elements.closeProfile.onclick = () => elements.profileModal.classList.add('hidden');
+elements.saveProfile.onclick = async () => {
+    await update(ref(db, 'users/' + currentUser.uid), { bio: elements.profileBio.value });
+    elements.profileModal.classList.add('hidden');
+    alert("Profil güncellendi!");
 };
 
 // --- Theme & Utils ---
-themeToggle.onclick = () => {
+elements.themeToggle.onclick = () => {
     const isDark = document.body.classList.toggle('dark-mode');
     document.body.classList.toggle('light-mode', !isDark);
-    themeToggle.innerHTML = isDark ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+    elements.themeToggle.innerHTML = isDark ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
     localStorage.setItem('theme', isDark ? 'dark' : 'light');
 };
 
-const savedTheme = localStorage.getItem('theme');
-if (savedTheme === 'dark') {
+if (localStorage.getItem('theme') === 'light') {
+    document.body.classList.add('light-mode');
+    document.body.classList.remove('dark-mode');
+    elements.themeToggle.innerHTML = '<i class="fas fa-moon"></i>';
+} else {
     document.body.classList.add('dark-mode');
-    document.body.classList.remove('light-mode');
-    themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
+    elements.themeToggle.innerHTML = '<i class="fas fa-sun"></i>';
 }
 
 function formatTime(timestamp) {
     if (!timestamp) return "";
     const date = new Date(timestamp);
     const now = new Date();
-    const isToday = date.toDateString() === now.toDateString();
-    
-    if (isToday) {
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    } else {
-        return date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
+    return date.toDateString() === now.toDateString() 
+        ? date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+        : date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-mobileMenuBtn.onclick = () => sidebar.classList.add('open');
-mobileCloseSidebar.onclick = () => sidebar.classList.remove('open');
+elements.mobileMenuBtn.onclick = () => elements.sidebar.classList.add('open');
+elements.mobileCloseSidebar.onclick = () => elements.sidebar.classList.remove('open');
